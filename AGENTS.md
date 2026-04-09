@@ -242,5 +242,5 @@ The app requires a running VAPI assistant and active n8n workflows to function e
 - Do not modify the VAPI system prompt without updating both `src/vapi-system-prompt.md` and the live assistant
 - Do not change the n8n webhook paths without also updating the VAPI tool server URLs
 - Do not add features or refactor code beyond what is explicitly requested
-- Do not introduce new dependencies without checking they are necessary
+- Do not introduce new dependencies without checking if they are necessary
 - Do not use Next.js patterns — this is a Vite project
