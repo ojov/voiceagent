@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Vapi from "@vapi-ai/web";
+import type { UserInfo } from "../components/UserInfoForm";
 
 export type CallStatus = "idle" | "connecting" | "active" | "ending";
 
@@ -10,41 +11,33 @@ export interface TranscriptMessage {
   timestamp: Date;
 }
 
-const PUBLIC_KEY = import.meta.env.VITE_VAPI_PUBLIC_KEY as string;
+const PUBLIC_KEY   = import.meta.env.VITE_VAPI_PUBLIC_KEY  as string;
 const ASSISTANT_ID = import.meta.env.VITE_VAPI_ASSISTANT_ID as string;
 
 export function useVapi() {
   const vapiRef = useRef<Vapi | null>(null);
-  const [status, setStatus] = useState<CallStatus>("idle");
+  const [status, setStatus]       = useState<CallStatus>("idle");
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
 
   useEffect(() => {
     const vapi = new Vapi(PUBLIC_KEY);
     vapiRef.current = vapi;
 
-    vapi.on("call-start", () => {
-      setStatus("active");
-      setError(null);
-    });
-
-    vapi.on("call-end", () => {
-      setStatus("idle");
-      setIsSpeaking(false);
-    });
-
+    vapi.on("call-start", () => { setStatus("active"); setError(null); });
+    vapi.on("call-end",   () => { setStatus("idle");   setIsSpeaking(false); });
     vapi.on("speech-start", () => setIsSpeaking(true));
-    vapi.on("speech-end", () => setIsSpeaking(false));
+    vapi.on("speech-end",   () => setIsSpeaking(false));
 
     vapi.on("message", (message) => {
       if (message.type === "transcript" && message.transcriptType === "final") {
         setTranscript((prev) => [
           ...prev,
           {
-            id: `${Date.now()}-${Math.random()}`,
-            role: message.role as "user" | "assistant",
-            text: message.transcript,
+            id:        `${Date.now()}-${Math.random()}`,
+            role:      message.role as "user" | "assistant",
+            text:      message.transcript,
             timestamp: new Date(),
           },
         ]);
@@ -52,23 +45,32 @@ export function useVapi() {
     });
 
     vapi.on("error", (err) => {
-      console.error("[VAPI]", err);
-      setError("Something went wrong. Please try again.");
+      console.error("[VAPI error]", JSON.stringify(err, null, 2));
+      const raw = err?.error?.message ?? err?.msg ?? err?.message ?? err;
+      const msg =
+        typeof raw === "string" ? raw :
+        raw?.msg ?? raw?.message ?? raw?.details ?? null;
+      setError(typeof msg === "string" ? msg : "Something went wrong. Please try again.");
       setStatus("idle");
     });
 
-    return () => {
-      vapi.stop();
-    };
+    return () => { vapi.stop(); };
   }, []);
 
-  const startCall = useCallback(async () => {
+  const startCall = useCallback(async (user: UserInfo) => {
     if (!vapiRef.current || status !== "idle") return;
     setStatus("connecting");
     setTranscript([]);
     setError(null);
     try {
-      await vapiRef.current.start(ASSISTANT_ID);
+      await vapiRef.current.start(ASSISTANT_ID, {
+        // Inject name and email as dynamic variables — available in the
+        // system prompt as {{userName}} and {{userEmail}}
+        variableValues: {
+          userName:  user.name,
+          userEmail: user.email,
+        },
+      });
     } catch (err) {
       console.error("[VAPI] start error", err);
       setError("Could not connect. Check your microphone permissions.");
